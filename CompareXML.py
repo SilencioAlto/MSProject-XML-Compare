@@ -16,6 +16,13 @@ CONSTRAINT_TYPES = {
     '7': 'Finish No Later Than'
 }
 
+LINK_TYPES = {
+    '0': 'FS',  # Finish-to-Start
+    '1': 'SS',  # Start-to-Start
+    '2': 'FF',  # Finish-to-Finish
+    '3': 'SF'   # Start-to-Finish
+}
+
 # === 🔍 Parse tasks from a file ===
 def parse_tasks(uploaded_file):
     tree = ET.parse(uploaded_file)
@@ -35,24 +42,26 @@ def parse_tasks(uploaded_file):
         constraint = task.findtext('ns:ConstraintType', default='', namespaces=ns)
         duration = task.findtext('ns:Duration', default='', namespaces=ns)
 
-        predecessors = [
-            pred.findtext('ns:PredecessorUID', default='', namespaces=ns)
-            for pred in task.findall('ns:PredecessorLink', ns)
-        ]
+        predecessors = []
+        for pred in task.findall('ns:PredecessorLink', ns):
+            pred_uid = pred.findtext('ns:PredecessorUID', default='', namespaces=ns)
+            link_type = pred.findtext('ns:Type', default='0', namespaces=ns)
+            if pred_uid:
+                predecessors.append((pred_uid, LINK_TYPES.get(link_type, f"Unknown({link_type})")))
 
         tasks[uid] = {
             'TaskName': name,
             'ConstraintType': CONSTRAINT_TYPES.get(constraint, f"Unknown ({constraint})"),
             'Duration': duration,
-            'Predecessors': sorted(p for p in predecessors if p),
+            'Predecessors': sorted(predecessors),
             'Successors': []
         }
 
     # Fill successors
     for uid, task in tasks.items():
-        for pred_uid in task['Predecessors']:
+        for pred_uid, _ in task['Predecessors']:
             if pred_uid in tasks:
-                tasks[pred_uid]['Successors'].append(uid)
+                tasks[pred_uid]['Successors'].append((uid, 'FS'))  # Simplified assumption
 
     for task in tasks.values():
         task['Successors'].sort()
